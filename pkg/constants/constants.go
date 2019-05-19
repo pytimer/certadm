@@ -4,4 +4,6 @@ const (
 	TempDirPrefix = "certadm"
 	DefaultTempCertificatesDir = "/tmp/certadm"
 	KubeletCertificatesPath = "/var/lib/kubelet/pki"
+
+	DefaultKubeadmVersion = "v1.11.0"
 )

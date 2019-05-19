@@ -3,15 +3,14 @@ package certs
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/pytimer/certadm/pkg/constants"
+	"github.com/pytimer/certadm/pkg/kubeadm"
 
 	"github.com/otiai10/copy"
 	"k8s.io/klog"
-	ec "k8s.io/utils/exec"
 	"k8s.io/utils/path"
 	"k8s.io/utils/temp"
 )
@@ -75,20 +74,7 @@ func RenewCertificate(conf string) error {
 		return fmt.Errorf("config file: %s not exists", conf)
 	}
 
-	kubeadmPath, err := exec.LookPath("kubeadm")
-	if err != nil {
-		return err
-	}
-
-	args := []string{
-		"alpha",
-		"phase",
-		"certs",
-		"all",
-		fmt.Sprintf("--config=%s", conf),
-	}
-	cmd := ec.New().Command(kubeadmPath, args...)
-	out, err := cmd.CombinedOutput()
+	out, err := kubeadm.PhasesAlphaCerts(conf)
 	if err != nil {
 		return err
 	}
