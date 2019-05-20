@@ -3,12 +3,12 @@ package kubeconfig
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"k8s.io/klog"
-	ec "k8s.io/utils/exec"
 	"k8s.io/utils/path"
+
+	"github.com/pytimer/certadm/pkg/kubeadm"
 )
 
 var kubeConfigs = []string{
@@ -40,24 +40,11 @@ func RenewKubeConfigFile(conf string) error {
 		return fmt.Errorf("config file: %s not exists", conf)
 	}
 
-	kubeadmPath, err := exec.LookPath("kubeadm")
-	if err != nil {
-		return err
-	}
-
-	args := []string{
-		"alpha",
-		"phase",
-		"kubeconfig",
-		"all",
-		fmt.Sprintf("--config=%s", conf),
-	}
-	cmd := ec.New().Command(kubeadmPath, args...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return err
-	}
+	out, err := kubeadm.PhasesCreateKubeConfig(conf)
 	klog.Info(string(out))
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

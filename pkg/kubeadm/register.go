@@ -1,15 +1,20 @@
 package kubeadm
 
-var versions = make(map[string]string)
+var versions = make(map[string]Factory)
 
-func Add(key, version string) {
-	versions[key] = version
+type Factory interface {
+	RenewCertsCommandArgs() []string
+	RenewKubeConfigCommandArgs() []string
 }
 
-func GetAPIVersion(key string) string {
+func Add(key string, k Factory) {
+	versions[key] = k
+}
+
+func GetKubeadmFactory(key string) Factory {
 	v, ok := versions[key]
 	if !ok {
-		return "v1alpha2"
+		return nil
 	}
 	return v
 }

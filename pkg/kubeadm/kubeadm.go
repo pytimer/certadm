@@ -3,8 +3,12 @@ package kubeadm
 import (
 	"fmt"
 	stdexec "os/exec"
+	"strings"
 
 	"github.com/pytimer/certadm/pkg/constants"
+
+	"k8s.io/apimachinery/pkg/util/version"
+	"k8s.io/klog"
 	"k8s.io/utils/exec"
 )
 
@@ -18,26 +22,61 @@ func init() {
 	}
 }
 
-func getKubeadmAPIVersion(version string) string {
-	return "v1alpha2"
+func compareSemanticVersion(v1 *version.Version, v2 string) int {
+	res, err := v1.Compare(v2)
+	if err != nil {
+		return 0
+	}
+	return res
 }
 
-func PhasesAlphaCerts(configFile string) ([]byte, error) {
+func getKubeadmAPIVersion(v string) string {
+	semanticVersion := version.MustParseGeneric(v)
+	switch {
+	case compareSemanticVersion(semanticVersion, "v1.11.0") >= 0 && compareSemanticVersion(semanticVersion, "v1.12.0") < 0:
+		return "v1alpha2"
+	case compareSemanticVersion(semanticVersion, "v1.12.0") >= 0 && compareSemanticVersion(semanticVersion, "v1.13.0") < 0:
+		return "v1alpha3"
+	case compareSemanticVersion(semanticVersion, "v1.13.0") >= 0 && compareSemanticVersion(semanticVersion, "v1.15.0") < 0:
+		return "v1beta1"
+	case compareSemanticVersion(semanticVersion, "v1.15.0") >= 0:
+		return "v1beta2"
+	}
+
+	return constants.DefaultKubeadmAPIVersion
+}
+
+func getKubeadmVersion() string {
+	klog.V(3).Info("get kubeadm version")
 	kubeadmVersion := constants.DefaultKubeadmVersion
 	c := exec.New().Command(kubeadmExecPath, "version", "-o", "short")
 	b, err := c.Output()
 	if err == nil {
-		kubeadmVersion = string(b)
+		kubeadmVersion = strings.TrimRight(string(b), "\n")
 	}
+	return kubeadmVersion
+}
 
+func PhasesCreateCerts(configFile string) ([]byte, error) {
+	kubeadmVersion := getKubeadmVersion()
+	klog.V(1).Infof("[kubeadm-certs] Kubeadm version is %s\n", kubeadmVersion)
 
-	args := []string{
-		"alpha",
-		"phase",
-		"certs",
-		"all",
-		fmt.Sprintf("--config=%s", configFile),
-	}
+	kubeadmAPIVersion := getKubeadmAPIVersion(kubeadmVersion)
+	args := GetKubeadmFactory(kubeadmAPIVersion).RenewCertsCommandArgs()
+	args = append(args, fmt.Sprintf("--config=%s", configFile))
+	klog.V(2).Infof("[kubeadm-certs] renew certificates command args: '%s %s'", kubeadmExecPath, strings.Join(args, " "))
+	cmd := exec.New().Command(kubeadmExecPath, args...)
+	return cmd.CombinedOutput()
+}
+
+func PhasesCreateKubeConfig(configFile string) ([]byte, error) {
+	kubeadmVersion := getKubeadmVersion()
+	klog.V(1).Infof("[kubeadm-kubeconfig] Kubeadm version is %s\n", kubeadmVersion)
+
+	kubeadmAPIVersion := getKubeadmAPIVersion(kubeadmVersion)
+	args := GetKubeadmFactory(kubeadmAPIVersion).RenewKubeConfigCommandArgs()
+	args = append(args, fmt.Sprintf("--config=%s", configFile))
+	klog.V(2).Infof("[kubeadm-kubeconfig] renew kubeconfig command args: '%s %s'", kubeadmExecPath, strings.Join(args, " "))
 	cmd := exec.New().Command(kubeadmExecPath, args...)
 	return cmd.CombinedOutput()
 }

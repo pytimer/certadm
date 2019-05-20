@@ -35,6 +35,7 @@ func BackupCertificates(src, dest string) error {
 		}
 	}
 
+	klog.V(2).Infof("[certs] Backup certificates from %s to %s \n", src, dest)
 	if err := copy.Copy(src, dest); err != nil {
 		return err
 	}
@@ -74,11 +75,11 @@ func RenewCertificate(conf string) error {
 		return fmt.Errorf("config file: %s not exists", conf)
 	}
 
-	out, err := kubeadm.PhasesAlphaCerts(conf)
+	out, err := kubeadm.PhasesCreateCerts(conf)
+	klog.Info(string(out))
 	if err != nil {
 		return err
 	}
-	klog.Info(string(out))
 
 	return nil
 }
