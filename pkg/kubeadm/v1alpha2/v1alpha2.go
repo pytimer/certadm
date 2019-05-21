@@ -1,6 +1,12 @@
 package v1alpha2
 
-import "github.com/pytimer/certadm/pkg/kubeadm"
+import (
+	"io/ioutil"
+
+	"gopkg.in/yaml.v2"
+
+	"github.com/pytimer/certadm/pkg/kubeadm"
+)
 
 func init() {
 	kubeadm.Add("v1alpha2", NewKubeadmAlpha2())
@@ -31,4 +37,18 @@ func (k *KubeadmAlpha2) RenewKubeConfigCommandArgs() []string {
 		"all",
 	}
 	return args
+}
+
+func (k *KubeadmAlpha2) ReadConfigFile(f string) (*kubeadm.Config, error){
+	b, err := ioutil.ReadFile(f)
+	if err != nil {
+		return nil, err
+	}
+
+	c := &kubeadm.Config{}
+	if err := yaml.Unmarshal(b, c); err != nil {
+		return nil, err
+	}
+
+	return c, nil
 }

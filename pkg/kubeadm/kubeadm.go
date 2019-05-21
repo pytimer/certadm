@@ -57,11 +57,15 @@ func getKubeadmVersion() string {
 	return kubeadmVersion
 }
 
-func PhasesCreateCerts(configFile string) ([]byte, error) {
-	kubeadmVersion := getKubeadmVersion()
-	klog.V(1).Infof("[kubeadm-certs] Kubeadm version is %s\n", kubeadmVersion)
+// GetKubeadmAPIVersion returns the kubeadm version via `kubeadm version -o short`
+func GetKubeadmAPIVersion() string {
+	v := getKubeadmVersion()
+	klog.V(1).Infof("[kubeadm] Using kubeadm version is %s\n", v)
+	return getKubeadmAPIVersion(v)
+}
 
-	kubeadmAPIVersion := getKubeadmAPIVersion(kubeadmVersion)
+func PhasesCreateCerts(configFile string) ([]byte, error) {
+	kubeadmAPIVersion := GetKubeadmAPIVersion()
 	args := GetKubeadmFactory(kubeadmAPIVersion).RenewCertsCommandArgs()
 	args = append(args, fmt.Sprintf("--config=%s", configFile))
 	klog.V(2).Infof("[kubeadm-certs] renew certificates command args: '%s %s'", kubeadmExecPath, strings.Join(args, " "))
@@ -70,13 +74,27 @@ func PhasesCreateCerts(configFile string) ([]byte, error) {
 }
 
 func PhasesCreateKubeConfig(configFile string) ([]byte, error) {
-	kubeadmVersion := getKubeadmVersion()
-	klog.V(1).Infof("[kubeadm-kubeconfig] Kubeadm version is %s\n", kubeadmVersion)
-
-	kubeadmAPIVersion := getKubeadmAPIVersion(kubeadmVersion)
+	kubeadmAPIVersion := GetKubeadmAPIVersion()
 	args := GetKubeadmFactory(kubeadmAPIVersion).RenewKubeConfigCommandArgs()
 	args = append(args, fmt.Sprintf("--config=%s", configFile))
 	klog.V(2).Infof("[kubeadm-kubeconfig] renew kubeconfig command args: '%s %s'", kubeadmExecPath, strings.Join(args, " "))
 	cmd := exec.New().Command(kubeadmExecPath, args...)
 	return cmd.CombinedOutput()
+}
+
+// GetCertificatesDirFromConfigFile returns the certificates directory from the kubeadm config file
+func GetCertificatesDirFromConfigFile(configFile string) (string, error) {
+	v := GetKubeadmAPIVersion()
+	factory := GetKubeadmFactory(v)
+
+	c, err := factory.ReadConfigFile(configFile)
+	if err != nil {
+		return "", err
+	}
+
+	if c.CertificatesDir == "" {
+		c.CertificatesDir = constants.KubernetesPkiDir
+	}
+
+	return c.CertificatesDir, nil
 }

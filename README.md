@@ -52,7 +52,7 @@ When the Kubernetes cluster change ip address, the **recreate** command should b
 
 ### Renew certificates and kubeconfig
 
-- kubeadm-cert.yaml文件内容
+- kubeadm-cert.yaml content:
 
 ```yaml
 apiVersion: kubeadm.k8s.io/v1alpha2
@@ -63,7 +63,6 @@ apiServerCertSANs:
 - "k8s-1"
 - "192.168.10.100"
 - "cloud.kubernetes.cluster.lb"
-- "127.0.0.1"
 api:
     controlPlaneEndpoint: "cloud.kubernetes.cluster.lb:6443"
 etcd:
@@ -72,11 +71,14 @@ etcd:
         - "192.168.10.10"
         - "192.168.10.100"
         - "cloud.kubernetes.cluster.lb"
-        - "127.0.0.1"
         peerCertSANs:
         - "192.168.10.10"
 certificatesDir: /etc/kubernetes/pki
+nodeRegistration:
+    name: "k8s-1"
 ```
+
+Renew the Kubernetes certificates.
 
 ```bash
 $ ./bin/certadm renew --config=kubeadm-cert.yaml -v 5

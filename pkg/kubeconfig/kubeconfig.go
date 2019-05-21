@@ -5,10 +5,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/pytimer/certadm/pkg/kubeadm"
+
 	"k8s.io/klog"
 	"k8s.io/utils/path"
+	"github.com/otiai10/copy"
 
-	"github.com/pytimer/certadm/pkg/kubeadm"
+
 )
 
 var kubeConfigs = []string{
@@ -47,4 +50,13 @@ func RenewKubeConfigFile(conf string) error {
 	}
 
 	return nil
+}
+
+func CreateKubectlKubeConfig(kubernetesDir string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = "/root"
+	}
+	kubectlDir := fmt.Sprintf("%s/.kube/config", homeDir)
+	return copy.Copy(filepath.Join(kubernetesDir, "admin.conf"), kubectlDir)
 }

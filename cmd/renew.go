@@ -2,39 +2,36 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/pytimer/certadm/pkg/certs"
 	"github.com/pytimer/certadm/pkg/constants"
+	"github.com/pytimer/certadm/pkg/kubeadm"
 	"github.com/pytimer/certadm/pkg/kubeconfig"
 
-	"github.com/otiai10/copy"
 	"github.com/spf13/cobra"
 	"k8s.io/klog"
 )
 
-var (
-	KubernetesDir    = "/etc/kubernetes"
-	kubernetesPkiDir = "/etc/kubernetes/pki"
-)
-
 type renewOptions struct {
-	KubeDir         string
-	CertificatesDir string
-	configFile      string
-	KubeConfigDir string
+	kubernetesDir string
+	configFile    string
 }
 
 // NewCmdRenew returns "certadm renew" command.
 func NewCmdRenew() *cobra.Command {
 	opts := &renewOptions{
-		KubeDir:         KubernetesDir,
-		CertificatesDir: kubernetesPkiDir,
+		kubernetesDir: constants.KubernetesDir,
 	}
 	cmd := &cobra.Command{
 		Use:   "renew",
 		Short: "Run this command in order to renew Kubernetes cluster certificates",
 		Run: func(cmd *cobra.Command, args []string) {
+			if opts.configFile == "" {
+				fmt.Println("missing '--config' with arguments")
+				os.Exit(1)
+			}
 			if err := opts.run(); err != nil {
 				klog.Error(err)
 				return
@@ -42,30 +39,33 @@ func NewCmdRenew() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&opts.KubeDir, "root-dir", KubernetesDir, "The Kubernetes root directory.")
-	cmd.Flags().StringVar(&opts.CertificatesDir, "cert-dir", kubernetesPkiDir, "The path where to save and store the certificates.")
-	cmd.Flags().StringVar(&opts.KubeConfigDir, "kubeconfig-dir", KubernetesDir, "The path where to save the kubeconfig file")
 	cmd.Flags().StringVar(&opts.configFile, "config", "", "Using the config file to renew certificates.")
 
 	return cmd
 }
 
 func (o *renewOptions) run() error {
+	certificatesDir, err := kubeadm.GetCertificatesDirFromConfigFile(o.configFile)
+	if err != nil {
+		return err
+	}
+	o.kubernetesDir = filepath.Dir(certificatesDir)
+
 	// 1. backup old certificates to temp dir.
-	fmt.Println("[renew] Backup old Kubernetes certificates")
-	if err := certs.BackupCertificates(o.CertificatesDir, ""); err != nil {
+	fmt.Printf("[renew] Backup old Kubernetes certificates directory %s \n", certificatesDir)
+	if err := certs.BackupCertificates(certificatesDir, ""); err != nil {
 		return err
 	}
 
 	// 2. remove old certificates exclude CA and sa.
 	fmt.Println("[renew] Remove old Kubernetes certificates exclude CA and sa")
-	if err := certs.RemoveOldCertificates(o.CertificatesDir); err != nil {
+	if err := certs.RemoveOldCertificates(certificatesDir); err != nil {
 		return err
 	}
 
 	// 3. remove old kubeconfig
 	fmt.Println("[renew] Remove old kubeconfig file")
-	if err := kubeconfig.RemoveOldKubeconfig(o.KubeConfigDir); err != nil {
+	if err := kubeconfig.RemoveOldKubeconfig(o.kubernetesDir); err != nil {
 		return err
 	}
 
@@ -88,7 +88,7 @@ func (o *renewOptions) run() error {
 
 	// 6. copy new admin.conf to $HOME/.kube/config
 	fmt.Println("[renew] Copy admin.conf to $HOME/.kube/config")
-	if err := copy.Copy(filepath.Join(o.KubeDir, "admin.conf"), "~/.kube/config"); err != nil {
+	if err := kubeconfig.CreateKubectlKubeConfig(o.kubernetesDir); err != nil {
 		return err
 	}
 
