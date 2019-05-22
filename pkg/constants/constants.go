@@ -1,5 +1,7 @@
 package constants
 
+import "time"
+
 const (
 	TempDirPrefix              = "certadm"
 	DefaultTempCertificatesDir = "/tmp/certadm"
@@ -10,4 +12,7 @@ const (
 
 	KubernetesDir    = "/etc/kubernetes"
 	KubernetesPkiDir = "/etc/kubernetes/pki"
+
+	ContainerCallRetryInterval = 10 * time.Second
+	ContainerCallTimeout       = 5 * time.Minute
 )

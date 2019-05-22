@@ -7,11 +7,9 @@ import (
 
 	"github.com/pytimer/certadm/pkg/kubeadm"
 
+	"github.com/otiai10/copy"
 	"k8s.io/klog"
 	"k8s.io/utils/path"
-	"github.com/otiai10/copy"
-
-
 )
 
 var kubeConfigs = []string{

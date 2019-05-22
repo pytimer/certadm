@@ -39,7 +39,7 @@ func (k *KubeadmAlpha2) RenewKubeConfigCommandArgs() []string {
 	return args
 }
 
-func (k *KubeadmAlpha2) ReadConfigFile(f string) (*kubeadm.Config, error){
+func (k *KubeadmAlpha2) ReadConfigFile(f string) (*kubeadm.Config, error) {
 	b, err := ioutil.ReadFile(f)
 	if err != nil {
 		return nil, err
