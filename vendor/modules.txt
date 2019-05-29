@@ -4,6 +4,8 @@ github.com/inconshreveable/mousetrap
 github.com/lithammer/dedent
 # github.com/otiai10/copy v1.0.1
 github.com/otiai10/copy
+# github.com/pkg/errors v0.8.1
+github.com/pkg/errors
 # github.com/spf13/cobra v0.0.3
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.3
@@ -12,11 +14,15 @@ github.com/spf13/pflag
 gopkg.in/yaml.v2
 # k8s.io/apimachinery v0.0.0-20190515023456-b74e4c97951f
 k8s.io/apimachinery/pkg/util/version
+k8s.io/apimachinery/pkg/util/wait
+k8s.io/apimachinery/pkg/util/errors
+k8s.io/apimachinery/pkg/util/runtime
+k8s.io/apimachinery/pkg/util/sets
 # k8s.io/klog v0.3.0
 k8s.io/klog
+# k8s.io/kubernetes v1.14.2
+k8s.io/kubernetes/pkg/util/initsystem
 # k8s.io/utils v0.0.0-20190506122338-8fab8cb257d5
+k8s.io/utils/exec
 k8s.io/utils/path
 k8s.io/utils/temp
-k8s.io/utils/exec
-# sigs.k8s.io/yaml v1.1.0
-sigs.k8s.io/yaml

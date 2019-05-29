@@ -1,20 +1,22 @@
 # Certadm
 
-Certadm is a tool that renew or recreate Kubernetes cluster certificates created by kubeadm.
+Certadm is a tool that renew Kubernetes cluster certificates created by kubeadm.
 
 Kubernetes cluster created by kubeadm, the certificates expire time is one year, after expired time, cluster can't working. So we should manually renew certificates and make it effect.
 
-This tool support two commands to renew/recreate Kubernetes cluster certificates, it's scope is limited to the local node filesystem now, but it can be integrated with higher level tools.
+This tool support renew Kubernetes cluster certificates, it's scope is limited to the local node filesystem now, but it can be integrated with higher level tools.
+
+## Support Kubeadm version
+
+Now the tool only support v1.11.0+, and the latest kubeadm support renew command, so we can use `kubeadm renew` to renew certificates, the latest kubeadm version will be support.
+
+If the Kubernetes version v1.13.0+, you can see [renew certficates](https://github.com/kubernetes/kubeadm/issues/581#issuecomment-471575078) .
 
 ## Certadm commands
 
 **certadm renew --config=xx.yaml** to renew Kubernetes control-plane components certificates.
 
-**certadm recreate --config=xx.yaml** to recreate Kubernetes control-plane and kubelet components certificates. (This command not implement currently)
-
 ## Implement workflow
-
-When the Kubernetes cluster change ip address, the **recreate** command should be used. But this operate is dangerous, so run this command must be carefully.
 
 ### Renew command workflow
 
@@ -22,7 +24,7 @@ When the Kubernetes cluster change ip address, the **recreate** command should b
 
 2. remove old certificates exclude CA and sa, the default certificates directory `/etc/kubernetes/pki`.
 
-`find /etc/kuberentes/pki/ -type f ! -name "ca.*" ! -name "sa.*" ! -name "authwebhookconfig.yaml" | xargs rm`
+`find /etc/kuberentes/pki/ -type f ! -name "ca.*" ! -name "sa.*" | xargs rm`
 
 3. remove control-plane components kubeconfig.
 
@@ -41,6 +43,8 @@ When the Kubernetes cluster change ip address, the **recreate** command should b
 6. recreate kubectl default kubeconfig.
 
 `cp /etc/kubernetes/pki/admin.conf ~/.kube/config`
+
+7. restart control plane containers and kubelet service
 
 ## Development
 
@@ -81,33 +85,30 @@ nodeRegistration:
 Renew the Kubernetes certificates.
 
 ```bash
-$ ./bin/certadm renew --config=kubeadm-cert.yaml -v 5
-[renew] Backup old Kubernetes certificates
-I0521 03:01:51.840036   15773 certs.go:38] [certs] Backup certificates from /etc/kubernetes/pki to /tmp/certadm-199797690
+$ ./bin/certadm renew --config=kubeadm-cert.yaml
+I0529 18:24:03.660050    5059 renew.go:53] [renew] Detected and using CRI socket: /var/run/dockershim.sock
+[renew] Backup old Kubernetes certificates directory /etc/kubernetes/pki
 [renew] Remove old Kubernetes certificates exclude CA and sa
 [renew] Remove old kubeconfig file
 [renew] Renew Kubernetes certificates
-I0521 03:01:51.847127   15773 kubeadm.go:50] get kubeadm version
-I0521 03:01:51.967841   15773 kubeadm.go:62] [kubeadm-certs] Kubeadm version is v1.11.6
-I0521 03:01:51.968069   15773 kubeadm.go:67] [kubeadm-certs] renew certificates command args: '/bin/kubeadm alpha phase certs all --config=kubeadm-cert.yaml'
-I0521 03:01:58.380451   15773 certs.go:79] [endpoint] WARNING: port specified in api.controlPlaneEndpoint overrides api.bindPort in the controlplane address
+I0529 18:24:10.196249    5059 certs.go:81] [endpoint] WARNING: port specified in api.controlPlaneEndpoint overrides api.bindPort in the controlplane address
 [certificates] Using the existing ca certificate and key.
-[certificates] Using the existing apiserver certificate and key.
-[certificates] Using the existing apiserver-kubelet-client certificate and key.
+[certificates] Generated apiserver certificate and key.
+[certificates] apiserver serving cert is signed for DNS names [k8s-1 kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local cloud.kubernetes.cluster.lb k8s-1 cloud.kubernetes.cluster.lb] and IPs [10.96.0.1 192.168.10.10 192.168.10.10 192.168.10.100]
+[certificates] Generated apiserver-kubelet-client certificate and key.
 [certificates] Using the existing sa key.
-[certificates] Using the existing front-proxy-ca certificate and key.
-[certificates] Using the existing front-proxy-client certificate and key.
+[certificates] Generated front-proxy-ca certificate and key.
+[certificates] Generated front-proxy-client certificate and key.
 [certificates] Using the existing etcd/ca certificate and key.
-[certificates] Using the existing etcd/server certificate and key.
-[certificates] Using the existing etcd/peer certificate and key.
-[certificates] Using the existing etcd/healthcheck-client certificate and key.
-[certificates] Using the existing apiserver-etcd-client certificate and key.
+[certificates] Generated etcd/server certificate and key.
+[certificates] etcd/server serving cert is signed for DNS names [k8s-1 localhost cloud.kubernetes.cluster.lb] and IPs [127.0.0.1 ::1 192.168.10.10 192.168.10.100]
+[certificates] Generated etcd/peer certificate and key.
+[certificates] etcd/peer serving cert is signed for DNS names [k8s-1 localhost] and IPs [192.168.10.10 127.0.0.1 ::1 192.168.10.10]
+[certificates] Generated etcd/healthcheck-client certificate and key.
+[certificates] Generated apiserver-etcd-client certificate and key.
 [certificates] valid certificates and keys now exist in "/etc/kubernetes/pki"
 [renew] Renew Kubernetes components kubeconfig
-I0521 03:01:58.380597   15773 kubeadm.go:50] get kubeadm version
-I0521 03:01:58.480582   15773 kubeadm.go:74] [kubeadm-kubeconfig] Kubeadm version is v1.11.6
-I0521 03:01:58.480798   15773 kubeadm.go:79] [kubeadm-kubeconfig] renew kubeconfig command args: '/bin/kubeadm alpha phase kubeconfig all --config=kubeadm-cert.yaml'
-I0521 03:02:00.136466   15773 kubeconfig.go:44] [endpoint] WARNING: port specified in api.controlPlaneEndpoint overrides api.bindPort in the controlplane address
+I0529 18:24:11.283982    5059 kubeconfig.go:45] [endpoint] WARNING: port specified in api.controlPlaneEndpoint overrides api.bindPort in the controlplane address
 [endpoint] WARNING: port specified in api.controlPlaneEndpoint overrides api.bindPort in the controlplane address
 [kubeconfig] Wrote KubeConfig file to disk: "/etc/kubernetes/admin.conf"
 [kubeconfig] Wrote KubeConfig file to disk: "/etc/kubernetes/kubelet.conf"
@@ -115,4 +116,9 @@ I0521 03:02:00.136466   15773 kubeconfig.go:44] [endpoint] WARNING: port specifi
 [kubeconfig] Wrote KubeConfig file to disk: "/etc/kubernetes/scheduler.conf"
 [renew] Remove old kubelet certificates
 [renew] Copy admin.conf to $HOME/.kube/config
+I0529 18:24:11.353448    5059 renew.go:168] kubernetes-manager containers: [e3694b0955bd a510bbae0087 fa9ea420be81 951b25ad0cbc]
+[renew] waiting for the kubelet to boot up the control plane as Static Pods from /etc/kubernetes/manifests
+I0529 18:24:23.811292    5059 renew.go:125] [renew] kubernetes-manager containers running
+[renew] restarting the kubelet service
+[renew] ensure the kubelet service is active
 ```

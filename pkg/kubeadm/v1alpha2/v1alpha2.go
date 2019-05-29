@@ -39,16 +39,19 @@ func (k *KubeadmAlpha2) RenewKubeConfigCommandArgs() []string {
 	return args
 }
 
-func (k *KubeadmAlpha2) ReadConfigFile(f string) (*kubeadm.Config, error) {
+func (k *KubeadmAlpha2) LoadConfigFromFile(f string) (*kubeadm.Config, error) {
 	b, err := ioutil.ReadFile(f)
 	if err != nil {
 		return nil, err
 	}
 
-	c := &kubeadm.Config{}
+	c := &Configuration{}
 	if err := yaml.Unmarshal(b, c); err != nil {
 		return nil, err
 	}
 
-	return c, nil
+	return &kubeadm.Config{
+		CertificatesDir: c.CertificatesDir,
+		CRISocket: c.NodeRegistration.CRISocket,
+	}, nil
 }

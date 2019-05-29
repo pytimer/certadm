@@ -82,18 +82,20 @@ func PhasesCreateKubeConfig(configFile string) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
-// GetCertificatesDirFromConfigFile returns the certificates directory from the kubeadm config file
-func GetCertificatesDirFromConfigFile(configFile string) (string, error) {
+// FetchConfigurationFromConfigFile returns the configurations from the kubeadm config file
+func FetchConfigurationFromConfigFile(configFile string) (*Config, error) {
 	v := GetKubeadmAPIVersion()
 	factory := GetKubeadmFactory(v)
 
-	c, err := factory.ReadConfigFile(configFile)
+	c, err := factory.LoadConfigFromFile(configFile)
+	return c, err
+}
+
+// GetCertificatesDirFromConfigFile returns the certificates directory from the kubeadm config file
+func GetCertificatesDirFromConfigFile(configFile string) (string, error) {
+	c, err := FetchConfigurationFromConfigFile(configFile)
 	if err != nil {
 		return "", err
-	}
-
-	if c.CertificatesDir == "" {
-		c.CertificatesDir = constants.KubernetesPkiDir
 	}
 
 	return c.CertificatesDir, nil

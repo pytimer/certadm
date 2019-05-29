@@ -5,7 +5,7 @@ var versions = make(map[string]Factory)
 type Factory interface {
 	RenewCertsCommandArgs() []string
 	RenewKubeConfigCommandArgs() []string
-	ReadConfigFile(f string) (*Config, error)
+	LoadConfigFromFile(f string) (*Config, error)
 }
 
 func Add(key string, k Factory) {

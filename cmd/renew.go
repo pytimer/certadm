@@ -4,45 +4,55 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/pytimer/certadm/pkg/certs"
 	"github.com/pytimer/certadm/pkg/constants"
 	"github.com/pytimer/certadm/pkg/kubeadm"
 	"github.com/pytimer/certadm/pkg/kubeconfig"
+	"github.com/pytimer/certadm/pkg/util"
+	utilruntime "github.com/pytimer/certadm/pkg/util/runtime"
 
 	"github.com/spf13/cobra"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/util/initsystem"
-	"k8s.io/utils/exec"
+	utilsexec "k8s.io/utils/exec"
 )
-
-var controlPlaneNames = []string{
-	"kube-apiserver",
-	"kube-scheduler",
-	"kube-controller-manager",
-	"etcd",
-}
 
 type renewOptions struct {
 	kubernetesDir string
 	configFile    string
+	criSocketPath string
 }
 
 // NewCmdRenew returns "certadm renew" command.
 func NewCmdRenew() *cobra.Command {
-	opts := &renewOptions{
-		kubernetesDir: constants.KubernetesDir,
-	}
+	opts := &renewOptions{}
 	cmd := &cobra.Command{
 		Use:   "renew",
 		Short: "Run this command in order to renew Kubernetes cluster certificates",
 		Run: func(cmd *cobra.Command, args []string) {
-			if opts.configFile == "" {
-				fmt.Println("missing '--config' with arguments")
-				os.Exit(1)
+
+			if opts.configFile != "" {
+				c, err := kubeadm.FetchConfigurationFromConfigFile(opts.configFile)
+				if err != nil {
+					klog.Errorf("failed to load config from '--config': [%v]", err)
+					os.Exit(1)
+				}
+
+				if c.CertificatesDir == "" {
+					klog.Warningf("missing the Kubernetes root directory with '--config', so using the default directory %q\n", constants.KubernetesDir)
+					c.CertificatesDir = filepath.Join(constants.KubernetesDir, "pki")
+				}
+				opts.kubernetesDir = filepath.Dir(c.CertificatesDir)
+
+				opts.criSocketPath, err = DetectCRISocket(c)
+				if err != nil {
+					klog.Warningf("[renew] failed to detected and using CRI socket: %v", err)
+					opts.criSocketPath = constants.DefaultDockerCRISocket
+				}
+				klog.Infof("[renew] Detected and using CRI socket: %s", opts.criSocketPath)
 			}
+
 			if err := opts.run(); err != nil {
 				klog.Error(err)
 				return
@@ -51,16 +61,13 @@ func NewCmdRenew() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&opts.configFile, "config", "", "Using the config file to renew certificates.")
+	cmd.Flags().StringVar(&opts.kubernetesDir, "root-dir", constants.KubernetesDir, "The path save the Kubernetes certificates and kubeconfig.")
 
 	return cmd
 }
 
 func (o *renewOptions) run() error {
-	certificatesDir, err := kubeadm.GetCertificatesDirFromConfigFile(o.configFile)
-	if err != nil {
-		return err
-	}
-	o.kubernetesDir = filepath.Dir(certificatesDir)
+	certificatesDir := filepath.Join(o.kubernetesDir, "pki")
 
 	// 1. backup old certificates to temp dir.
 	fmt.Printf("[renew] Backup old Kubernetes certificates directory %s \n", certificatesDir)
@@ -105,22 +112,17 @@ func (o *renewOptions) run() error {
 
 	// 7. restart control-plane components and kubelet service
 	// Try to restart control plane components
-	// TODO: crictl not implement now, it only support docker.
-	// crictlPath, err := exec.LookPath("crictl")
-	// if err == nil {
-	// 	restartWithCrictl()
-	// } else {
-	// 	restartWithDocker()
-	// }
-	if err := resetWithDocker(); err != nil {
-		klog.Errorln("[renew] failed to stop the running control plane containers")
-		klog.Warningln("[renew] please stop the running control plane containers manually")
+	if err := removeContainers(utilsexec.New(), o.criSocketPath); err != nil {
+		klog.Errorf("[renew] failed to stop the control plane containers, %v \n", err)
+		klog.Warningln("[renew] please stop the control plane containers manually")
 	}
 
 	fmt.Printf("[renew] waiting for the kubelet to boot up the control plane as Static Pods from %s/manifests \n", o.kubernetesDir)
-	if err := waitForContainersRunning(); err != nil {
+	if err := util.WaitForContainersRunning(constants.ControlPlaneNames); err != nil {
 		klog.Errorf("[renew] failed to waiting for containers running: [%v]\n", err)
 		klog.Warningln("[renew] please ensure control plane running by docker or crictl")
+	}else {
+		klog.Infoln("[renew] kubernetes-manager containers running")
 	}
 
 	// Try to restart the kubelet service
@@ -132,54 +134,37 @@ func (o *renewOptions) run() error {
 	} else {
 		fmt.Println("[renew] restarting the kubelet service")
 		if err := initSystem.ServiceRestart("kubelet"); err != nil {
-			klog.Warningf("[renew] the kubelet service could not be restarted by kubeadm: [%v]\n", err)
+			klog.Warningf("[renew] the kubelet service could not be restarted by certadm: [%v]\n", err)
 			klog.Warningln("[renew] please ensure kubelet is restarted manually")
+		}
+
+		fmt.Println("[renew] ensure the kubelet service is active")
+		if err := util.WaitForServiceActive("kubelet", constants.ServiceCallRetryInterval, constants.ServiceCallTimeout); err != nil {
+			klog.Warningln("[wait-service] please ensure kubelet is active manually")
 		}
 	}
 
 	return nil
 }
 
-func resetWithDocker() error {
-	var filterQuery string
-	for _, n := range controlPlaneNames {
-		filterQuery += fmt.Sprintf("--filter name=k8s_%s ", n)
+func DetectCRISocket(cfg *kubeadm.Config) (string, error) {
+	if cfg != nil && cfg.CRISocket != "" {
+		return cfg.CRISocket, nil
 	}
 
-	cmd := fmt.Sprintf("docker ps -a %s -q | xargs -r docker rm --force --volumes", filterQuery)
-	klog.V(1).Infof("stop the control plane containers, command: [%s]", cmd)
-	c := exec.New().Command("sh", "-c", cmd)
-	b, err := c.Output()
-	klog.Infoln(string(b))
+	return utilruntime.DetectCRISocket()
+}
+
+func removeContainers(execer utilsexec.Interface, criSocketPath string) error {
+	containerRuntime, err := utilruntime.NewContainerRuntime(execer, criSocketPath)
 	if err != nil {
 		return err
 	}
-	return nil
-}
-
-func waitForContainersRunning() error {
-	return wait.PollImmediate(constants.ContainerCallRetryInterval, constants.ContainerCallTimeout, func() (done bool, err error) {
-		var errMsg string
-		for _, n := range controlPlaneNames {
-			cmd := fmt.Sprintf("docker ps -a --filter status=running --filter name=k8s_%s --format '{{ .Names }}'", n)
-			klog.V(2).Infof("get %s container status, command: [%s]", n, cmd)
-			c := exec.New().Command("sh", "-c", cmd)
-			b, err := c.Output()
-			if err != nil {
-				errMsg += fmt.Sprintf("failed to get %s container status, %s", n, string(b))
-				continue
-			}
-
-			if string(b) == "" || strings.EqualFold(string(b), "\n") {
-				klog.V(3).Infof("container [%s] status not running \n", n)
-				errMsg += fmt.Sprintf("%s container not running. ", n)
-				continue
-			}
-		}
-		if errMsg != "" {
-			klog.V(1).Infof("failed to waiting for the containers running status, %s", errMsg)
-			return false, nil
-		}
-		return true, nil
-	})
+	klog.V(1).Infof("container runtime %v", containerRuntime)
+	containers, err := containerRuntime.ListKubeContainers()
+	if err != nil {
+		return err
+	}
+	klog.Infof("kubernetes-manager containers: %v", containers)
+	return containerRuntime.RemoveContainers(containers)
 }

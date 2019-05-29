@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/pytimer/certadm/pkg/constants"
 	"github.com/pytimer/certadm/pkg/kubeadm"
@@ -15,13 +14,25 @@ import (
 	"k8s.io/utils/temp"
 )
 
-var excludeCertificates = []string{
-	"ca.crt",
-	"ca.key",
-	"sa.key",
-	"sa.pub",
-	"etcd/ca.crt",
-	"etcd/ca.key",
+var defaultCertificates = []string{
+	"apiserver.crt",
+	"apiserver.key",
+	"apiserver-kubelet-client.crt",
+	"apiserver-kubelet-client.key",
+	// Front Proxy certs
+	"front-proxy-ca.crt",
+	"front-proxy-ca.key",
+	"front-proxy-client.crt",
+	"front-proxy-client.key",
+	// etcd certs
+	"etcd/healthcheck-client.crt",
+	"etcd/healthcheck-client.key",
+	"etcd/peer.crt",
+	"etcd/peer.key",
+	"etcd/server.crt",
+	"etcd/server.key",
+	"apiserver-etcd-client.crt",
+	"apiserver-etcd-client.key",
 }
 
 // BackupCertificates ...
@@ -45,27 +56,18 @@ func BackupCertificates(src, dest string) error {
 
 // RemoveOldCertificates remove unused certificates in certDir.
 func RemoveOldCertificates(certDir string) error {
-	return filepath.Walk(certDir, func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() {
-			return nil
+	for _, cert := range defaultCertificates {
+		p := filepath.Join(certDir, cert)
+		if exists, err := path.Exists(path.CheckFollowSymlink, p); err != nil {
+			return err
+		} else if !exists {
+			continue
 		}
-		if checkCertificateIsDeleted(strings.Split(path, certDir+"/")[1]) {
-			if err := os.Remove(path); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
-}
-
-func checkCertificateIsDeleted(cert string) bool {
-	for _, v := range excludeCertificates {
-		if strings.EqualFold(cert, v) {
-			return false
+		if err := os.Remove(p); err != nil {
+			return err
 		}
 	}
-	return true
+	return nil
 }
 
 func RenewCertificate(conf string) error {
